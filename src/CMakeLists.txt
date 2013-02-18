@@ -1,4 +1,4 @@
 
-add_executable (cppfem main.cpp)
+add_executable (cppfem main.cpp fem.cpp)
 
 
