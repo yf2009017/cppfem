@@ -1,3 +1,6 @@
+#include <iostream>
+#include <cstdio>
+
 #include "../eigen/Eigen/Core"
 #include "../eigen/Eigen/LU"
 #include "../eigen/Eigen/Geometry"
@@ -8,24 +11,30 @@
 
 using namespace Eigen;
 
+////////// NODE ///////////
 
 // Node class constructor
-Node::Node(Matrix <Float, 1, 2> coord, Float T)
-    : coord(coord), T(T) { }
+Node::Node(Int idx, Matrix <Float, 1, 2> coord, Float T)
+    : idx(idx), coord(coord), T(T) { }
+
+// Get node index
+Int Node::getidx()
+{ return idx; }
 
 // Get node value
 Float Node::getT()
-{
-    return T;
-}
+{ return T; }
 
 // Set node value
-Float Node::setT(Float T_new)
-{
-    T = T_new;
-}
+void Node::setT(Float T_new)
+{ T = T_new; }
+
+// Get node coordinate
+Matrix <Float, 1, 2> Node::getcoord ()
+{ return coord; }
 
 
+////////// ELEMENT ///////////
 
 // Element class constructor
 Element::Element(Float k, Float A)
@@ -51,7 +60,25 @@ Matrix <Float, 1, 3> Element::shplint3(
     return m;
 }
 
-//void Element::updateCoord() { }
+// Update element node coordinate matrix
+void Element::updateCoord() 
+{
+    int i = 0;
+    std::list<Node>::iterator n = nodelist.begin();
+    while (n != nodelist.end()) {
+        Coord.row(i++) = n->getcoord();
+    }
+}
+
+// Update element topograpy matrix
+void Element::updateTopo()
+{
+    int i = 0;
+    std::list<Node>::iterator n = nodelist.begin();
+    while (n != nodelist.end()) {
+        Topo(0, i++) = n->getidx();
+    }
+}
 
 // Sets local gradient matrix (eq. 23)
 void Element::gradlt3()
@@ -101,23 +128,153 @@ void Element::loadandstiffness(int N_ip)
     }
 }
 
-// Return node list
-std::list <Node> getnodes()
+// Return node index vector
+std::list <Node> Element::getnodes()
+{ return nodelist; }
+        
+// Return element topology matrix
+Matrix <Int, 1, 3> Element::getTopo()
 {
-    return nodelist;
+    updateTopo();
+    return Topo;
+}
+
+// Return element coordinate matrix
+Matrix <Float, 3, 2> Element::getCoord()
+{
+    updateCoord();
+    return Coord;
 }
 
 
 
-
+////////// MESH ///////////
 
 // Mesh class constructor
 Mesh::Mesh() { }
 
 // Add element to mesh
 void Mesh::addelement(Element element)
+{ elementlist.push_back(element); }
+
+// Update topology matrix by calling all elements, 
+// who in turn call all their nodes
+void Mesh::updateTOPO()
 {
-    elementlist.push_back(element);
+    int i = 0;
+    std::list<Element>::iterator e = elementlist.begin();
+    while (e != elementlist.end()) {
+        TOPO.row(i++) = e->getTopo();
+    }
+}
+
+// Update coordinate matrix by calling all elements, 
+// who in turn call all their nodes
+void Mesh::updateCOORD()
+{
+    int i = 0;
+    std::list<Element>::iterator e = elementlist.begin();
+    while (e != elementlist.end()) {
+        Matrix <Float, 3, 2> Coord = e->getCoord();
+        for (int j=0; j<3; ++j)
+            COORD.row(i++ * 3 + j) = Coord.row(j);
+    }
+}
+
+// Enforce essential (Dirichlet) boundary condition on nodes
+// with index i to value val.
+// Using algorithm displayed in fig. 5, p. 12
+void Mesh::ebc(const Int i, const Float val)
+{
+    f -= val * K.col(i);
+    f(i) = val;
+    K.row(i).fill(0.0);
+    K.col(i).fill(0.0);
+    K(i,i) = 1.0;
+}
+
+// Enforce natural (Neumann) boundary condition to node pair
+void Mesh::nbc(
+        const Int node_i, 
+        const Int node_j,
+        const Float val,
+        const Int N_ip)
+{
+    //Node n_i = 
+    //Node n_j = 
+    //Matrix <Float, 1, 2> coord_i = n_i.getcoord();
+    //Matrix <Float, 1, 2> coord_j = n_j.getcoord();
+    Matrix <Float, 1, 2> coord_i = COORD.row(node_i);
+    Matrix <Float, 1, 2> coord_j = COORD.row(node_j);
+    Matrix <Float, 1, 2> x_ij = coord_j - coord_i;
+    Matrix <Float, 2, 1> f_new;
+    Float dl = sqrt(x_ij(0)*x_ij(0) + x_ij(1)*x_ij(1));
+
+    Matrix <Float, Dynamic, 2> gi = gauss1d(N_ip);
+    //Matrix <Float, 1, 2> p;
+    Matrix <Float, 2, 1> p;
+
+    for (int ip = 0; ip<N_ip; ++ip) {
+        p << 1.0+gi(ip,0), 1.0-gi(ip,0);
+        f_new = gi(ip,1) * 0.5 * p * val * dl/2.0;
+    }
+
+    f(node_i) += f_new(0);
+    f(node_j) += f_new(1);
+}
+
+
+// Solve the steady state problem of the system
+// See http://eigen.tuxfamily.org/dox/TutorialLinearAlgebra.html 
+// for information on the different decompositions/solvers
+void Mesh::steadystate()
+{ 
+    T = K.fullPivLu().solve(f);     // Speed: -, Accuracy: +++
+    //T = K.householderQr().solve(f); // Speed: ++, Accuracy: +
+}
+
+// Read triangle topology file (*.ele)
+void Mesh::readTriangleEle(const std::string filename)
+{
+    FILE* fp;
+    if ((fp = fopen(filename.c_str(),"r")) == NULL) {
+        std::cerr << "Error opening " << filename << std::endl;
+        throw "Read error in readTriangleEle";
+    }
+
+    int nd, boundarymarkers, n1, n2, n3;
+    long int tmp;
+    fscanf(fp, "%d  %d  %d", N_e, nd, boundarymarkers);
+
+    for (int i=0; i<N_e; ++i) {
+        fscanf(fp, "%4ld    %4d  %4d  %4d", tmp, n1, n2, n3);
+        TOPO.row(i) << n1, n2, n3;
+    }
+
+    fclose(fp);
+}
+
+
+// Read triangle coordinate file (*.node)
+void Mesh::readTriangleNode(const std::string filename)
+{
+    FILE* fp;
+    if ((fp = fopen(filename.c_str(),"r")) == NULL) {
+        std::cerr << "Error opening " << filename << std::endl;
+        throw "Read error in readTriangleNode";
+    }
+
+    Float x, y;
+    int nd, nobound;
+    long int tmp;
+    fscanf(fp, "%d  %d  %d  %d", N, nd, tmp, nobound);
+
+    for (int i=0; i<N_e; ++i) {
+        fscanf(fp, "%4d    %.17g  %.17g", tmp, x, y);
+        COORD.row(i) << x, y;
+    }
+
+    fclose(fp);
 }
 
 
