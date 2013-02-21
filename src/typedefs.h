@@ -2,7 +2,7 @@
 #define TYPEDEFS_H_
 
 // Define integer type
-typedef int Int;
+typedef long int Int;
 
 // Define floating-point precision
 typedef double Float;

@@ -160,6 +160,8 @@ class Mesh {
         // to update the COORD matrix
         void updateCOORD();
         
+        // Generate global stiffnes matrix and load vector
+        void findKf();
 
     public:
 
@@ -181,8 +183,11 @@ class Mesh {
         // Triangle interfacing, should be called after "./triangle A.poly"
         // Read A.1.ele, containing topology data
         void readTriangleEle(const std::string filename);
+        // Read A.1.poly, containing topology data
         void readTriangleNode(const std::string filename);
 
+        // Write temperatures
+        void writeT(const std::string filename);
 };
 
 #endif

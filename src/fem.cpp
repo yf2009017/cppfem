@@ -229,6 +229,7 @@ void Mesh::nbc(
 // for information on the different decompositions/solvers
 void Mesh::steadystate()
 { 
+    findKf();
     T = K.fullPivLu().solve(f);     // Speed: -, Accuracy: +++
     //T = K.householderQr().solve(f); // Speed: ++, Accuracy: +
 }
@@ -237,18 +238,21 @@ void Mesh::steadystate()
 void Mesh::readTriangleEle(const std::string filename)
 {
     FILE* fp;
-    if ((fp = fopen(filename.c_str(),"r")) == NULL) {
+    if ((fp = fopen(filename.c_str(), "r")) == NULL) {
         std::cerr << "Error opening " << filename << std::endl;
         throw "Read error in readTriangleEle";
     }
 
     int nd, boundarymarkers, n1, n2, n3;
     long int tmp;
-    fscanf(fp, "%d  %d  %d", N_e, nd, boundarymarkers);
+    fscanf(fp, "%ld  %d  %d", &N_e, &nd, &boundarymarkers);
+    TOPO.resize(N_e, 3);
 
     for (int i=0; i<N_e; ++i) {
-        fscanf(fp, "%4ld    %4d  %4d  %4d", tmp, n1, n2, n3);
-        TOPO.row(i) << n1, n2, n3;
+        fscanf(fp, "%4ld    %4d  %4d  %4d", &tmp, &n1, &n2, &n3);
+        TOPO(i,0) = n1;
+        TOPO(i,1) = n2;
+        TOPO(i,2) = n3;
     }
 
     fclose(fp);
@@ -259,7 +263,7 @@ void Mesh::readTriangleEle(const std::string filename)
 void Mesh::readTriangleNode(const std::string filename)
 {
     FILE* fp;
-    if ((fp = fopen(filename.c_str(),"r")) == NULL) {
+    if ((fp = fopen(filename.c_str(), "r")) == NULL) {
         std::cerr << "Error opening " << filename << std::endl;
         throw "Read error in readTriangleNode";
     }
@@ -267,15 +271,29 @@ void Mesh::readTriangleNode(const std::string filename)
     Float x, y;
     int nd, nobound;
     long int tmp;
-    fscanf(fp, "%d  %d  %d  %d", N, nd, tmp, nobound);
+    fscanf(fp, "%ld  %d  %d  %d", &N, &nd, &tmp, &nobound);
+    COORD.resize(N, 2);
 
     for (int i=0; i<N_e; ++i) {
-        fscanf(fp, "%4d    %.17g  %.17g", tmp, x, y);
-        COORD.row(i) << x, y;
+        fscanf(fp, "%4d    %.17g  %.17g", &tmp, &x, &y);
+        COORD(i,0) = x;
+        COORD(i,1) = y;
     }
 
     fclose(fp);
 }
+        
+// Write temperatures to file
+void Mesh::writeT(const std::string filename)
+{
+    FILE* fp;
+    if ((fp = fopen(filename.c_str(), "w")) == NULL) {
+        std::cerr << "Error opening " << filename << std::endl;
+        throw "Read error in writeT";
+    }
 
+    std::cout << T;
 
+    fclose(fp);
+}
 
