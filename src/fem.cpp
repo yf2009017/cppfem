@@ -1,4 +1,5 @@
 #include <iostream>
+#include <fstream>
 #include <cstdio>
 
 #include "../eigen/Eigen/Core"
@@ -37,14 +38,18 @@ Matrix <Float, 1, 2> Node::getcoord ()
 ////////// ELEMENT ///////////
 
 // Element class constructor
-Element::Element(Float k, Float A)
-    : k(k), A(A) { }
+Element::Element(Int idx, Float k, Float A)
+    : idx(idx), k(k), A(A) { }
+
+// Get element index
+Int Element::getidx()
+{ return idx; }
 
 // Add node to element
 void Element::addnode(Node node)
 {
-    if (nodelist.size() > 2)
-        throw "Error, element full of nodes";
+    if (nodelist.size() > 3)
+        std::cerr << "Error, element " << idx << " is full of nodes" << std::endl;
     nodelist.push_back(node);
 }
 
@@ -101,7 +106,7 @@ void Element::gradg()
 }
 
 // Find element load vector and stiffness matrix (eqs. 38 and 39)
-void Element::loadandstiffness(int N_ip)
+void Element::findK_ef_e(int N_ip)
 {
     // Get Gauss quadrature data [r_i, s_i, w_i], one row per integration point
     Matrix <Float, Dynamic, 3> g_i = gausst3(N_ip);
@@ -120,6 +125,8 @@ void Element::loadandstiffness(int N_ip)
 
     K_e.fill(0.0);
     f_e.fill(0.0);
+
+    std::cout << "running findK_ef_e" << std::endl;
 
     // Loop over integration points
     for (int i = 0; i<N_ip; ++i) {
@@ -146,12 +153,37 @@ Matrix <Float, 3, 2> Element::getCoord()
     return Coord;
 }
 
+// Return element stiffness matrix (K_e)
+Matrix <Float, 3, 3> Element::getK_e()
+{ return K_e; }
+
+// Return element load vector (f_e)
+Matrix <Float, 3, 1> Element::getf_e()
+{ return f_e; }
 
 
 ////////// MESH ///////////
 
 // Mesh class constructor
 Mesh::Mesh() { }
+
+// Initialize mesh with a predefined grid
+void Mesh::init()
+{
+    // Create each element
+    for (Int ie=0; ie<N_e; ++ie) {
+
+        Element e(ie);
+
+        // Create each node for each element
+        for (Int in=0; in<3; ++in) {
+            int idx = ie*3 + in;
+            Node n(idx, COORD.row(idx));
+            e.addnode(n);
+        }
+        addelement(e);
+    }
+}
 
 // Add element to mesh
 void Mesh::addelement(Element element)
@@ -166,6 +198,41 @@ void Mesh::updateTOPO()
     while (e != elementlist.end()) {
         TOPO.row(i++) = e->getTopo();
     }
+}
+
+// Find global stiffness matrix (K) and load vector (f)
+// by performing a volumetric integration of the elements
+void Mesh::findKf()
+{
+    K.setZero(N,N);
+    f.setZero(N,1);
+
+    std::list<Element>::iterator e = elementlist.begin();
+    while (e != elementlist.end()) {
+        std::cout << "element idx = " << e->getidx() << std::endl;
+
+        e->findK_ef_e();
+        Matrix <Float, 3, 3> K_e = e->getK_e();
+        Matrix <Float, 3, 1> f_e = e->getf_e();
+
+        Matrix <Int, 1, 3> nodes = TOPO.row(e->getidx());
+        
+        for (int i=0; i<3; ++i)
+            f(nodes(i)) += f_e(i);
+
+        int i = 0;
+        int r, c;
+        for (int j=0; j<3; ++j) {
+            for (int k=0; k<3; ++k) {
+                r = nodes(j);
+                c = nodes(k);
+                K(r,c) += K_e(i++);
+            }
+        }
+
+    }
+    std::cout << K << std::endl;
+    std::cout << f << std::endl;
 }
 
 // Update coordinate matrix by calling all elements, 
@@ -200,10 +267,6 @@ void Mesh::nbc(
         const Float val,
         const Int N_ip)
 {
-    //Node n_i = 
-    //Node n_j = 
-    //Matrix <Float, 1, 2> coord_i = n_i.getcoord();
-    //Matrix <Float, 1, 2> coord_j = n_j.getcoord();
     Matrix <Float, 1, 2> coord_i = COORD.row(node_i);
     Matrix <Float, 1, 2> coord_j = COORD.row(node_j);
     Matrix <Float, 1, 2> x_ij = coord_j - coord_i;
@@ -229,7 +292,6 @@ void Mesh::nbc(
 // for information on the different decompositions/solvers
 void Mesh::steadystate()
 { 
-    findKf();
     T = K.fullPivLu().solve(f);     // Speed: -, Accuracy: +++
     //T = K.householderQr().solve(f); // Speed: ++, Accuracy: +
 }
@@ -240,7 +302,6 @@ void Mesh::readTriangleEle(const std::string filename)
     FILE* fp;
     if ((fp = fopen(filename.c_str(), "r")) == NULL) {
         std::cerr << "Error opening " << filename << std::endl;
-        throw "Read error in readTriangleEle";
     }
 
     int nd, boundarymarkers, n1, n2, n3;
@@ -258,14 +319,12 @@ void Mesh::readTriangleEle(const std::string filename)
     fclose(fp);
 }
 
-
 // Read triangle coordinate file (*.node)
 void Mesh::readTriangleNode(const std::string filename)
 {
     FILE* fp;
     if ((fp = fopen(filename.c_str(), "r")) == NULL) {
         std::cerr << "Error opening " << filename << std::endl;
-        throw "Read error in readTriangleNode";
     }
 
     Float x, y;
@@ -286,14 +345,14 @@ void Mesh::readTriangleNode(const std::string filename)
 // Write temperatures to file
 void Mesh::writeT(const std::string filename)
 {
-    FILE* fp;
-    if ((fp = fopen(filename.c_str(), "w")) == NULL) {
+    std::ofstream ofs(filename.c_str());
+    if (!ofs) {
         std::cerr << "Error opening " << filename << std::endl;
-        throw "Read error in writeT";
     }
 
-    std::cout << T;
+    ofs << T;
 
-    fclose(fp);
+    if (ofs.is_open())
+        ofs.close();
 }
 

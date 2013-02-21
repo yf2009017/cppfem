@@ -47,6 +47,9 @@ class Element {
 
     private:
 
+        // Element index
+        Int idx;
+
         // Element conductivity term value
         Float k;
 
@@ -78,9 +81,6 @@ class Element {
         // List of node indexes
         std::list <Node> nodelist;
 
-        // Add node
-        void addnode(Node node);
-
         // Shape functions
         Matrix <Float, 1, 3> shplint3(
                 Matrix <Float, Dynamic, 1> r,
@@ -101,14 +101,18 @@ class Element {
         // Set global gradient matrix (dphi_g)
         void gradg();
 
-        // Set the element load vector and stiffness matrix (K and f)
-        void loadandstiffness(int N_ip = 1);
 
 
     public:
 
         // Constructor
-        Element(Float k = 1.5, Float A = 1.0e-6);
+        Element(Int idx, Float k = 1.5, Float A = 1.0e-6);
+
+        // Get element index
+        Int getidx();
+
+        // Add node
+        void addnode(Node node);
 
         // Return node list
         std::list <Node> getnodes();
@@ -118,6 +122,16 @@ class Element {
 
         // Return element coordinate matrix
         Matrix <Float, 3, 2> getCoord();
+
+        // Find element stiffness matrix (K_e) and load vector (f_e)
+        void findK_ef_e(int N_ip = 1);
+
+        // Return element stiffness matrix (K_e)
+        Matrix <Float, 3, 3> getK_e();
+
+        // Return element load vector (f_e)
+        Matrix <Float, 3, 1> getf_e();
+
 
 };
 
@@ -160,14 +174,14 @@ class Mesh {
         // to update the COORD matrix
         void updateCOORD();
         
-        // Generate global stiffnes matrix and load vector
-        void findKf();
-
     public:
 
         // Constructor
         Mesh();
         
+        // Initialize mesh, after COORD and TOPO are read
+        void init();
+
         // Essential boundary condition (fixed val) on element i
         void ebc(const Int i, const Float val);
 
@@ -176,6 +190,9 @@ class Mesh {
                 const Int node_j,
                 const Float flux,
                 const Int N_ip = 1);
+
+        // Find global stiffnes matrix (K) and load vector (f)
+        void findKf();
 
         // Solve the system in the steady state
         void steadystate();
