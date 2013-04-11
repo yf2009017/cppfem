@@ -4,5 +4,12 @@
 cmake_minimum_required (VERSION 2.6)
 project (cppfem)
 
+enable_testing()
+set(MEMORYCHECK_COMMAND:FILEPATH=/usr/bin/valgrind)
+
+# Set build type
+set(CMAKE_BUILD_TYPE Debug)
+#set(CMAKE_BUILD_TYPE Release)
+
 #add_subdirectory (triangle)
 add_subdirectory (src)

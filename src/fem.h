@@ -2,45 +2,12 @@
 #define FEM_H_
 
 #include <string>
-#include <list>
+#include <vector>
 
 #include "typedefs.h"
 #include "../eigen/Eigen/Core"
 
 using namespace Eigen;
-
-
-class Node {
-
-    private:
-
-        // Node index
-        Int idx;
-
-        // Node coordinate
-        Matrix <Float, 1, 2> coord;
-
-        // Node value
-        Float T;
-
-
-    public:
-
-        // Constructor
-        Node(Int idx, Matrix <Float, 1, 2> coord, Float T = 0.0);
-
-        // Get node index
-        Int getidx();
-
-        // Get node value
-        Float getT();
-
-        // Set node value
-        void setT(Float T_new);
-
-        // Get node coordinate
-        Matrix <Float, 1, 2> getcoord();
-};
 
 
 class Element {
@@ -78,19 +45,10 @@ class Element {
         // Element stiffness matrix
         Matrix <Float, 3, 3> K_e;
 
-        // List of node indexes
-        std::list <Node> nodelist;
-
         // Shape functions
         Matrix <Float, 1, 3> shplint3(
                 Matrix <Float, Dynamic, 1> r,
                 Matrix <Float, Dynamic, 1> s);
-
-        // Update element coordinate matrix (Coord)
-        void updateCoord();
-
-        // Update element topology matrix (Topo)
-        void updateTopo();
 
         // Set local gradient matrix (dphi_l)
         void gradlt3();
@@ -102,26 +60,13 @@ class Element {
         void gradg();
 
 
-
     public:
 
         // Constructor
-        Element(Int idx, Float k = 1.5, Float A = 1.0e-6);
+        Element(Int idx, Matrix <Float, 3, 2> Coord, Float k = 1.5, Float A = 1.0e-6);
 
         // Get element index
         Int getidx();
-
-        // Add node
-        void addnode(Node node);
-
-        // Return node list
-        std::list <Node> getnodes();
-
-        // Return element topology matrix
-        Matrix <Int, 1, 3> getTopo();
-
-        // Return element coordinate matrix
-        Matrix <Float, 3, 2> getCoord();
 
         // Find element stiffness matrix (K_e) and load vector (f_e)
         void findK_ef_e(int N_ip = 1);
@@ -131,8 +76,6 @@ class Element {
 
         // Return element load vector (f_e)
         Matrix <Float, 3, 1> getf_e();
-
-
 };
 
 
@@ -162,17 +105,8 @@ class Mesh {
         Matrix <Float, Dynamic, 1> T;
 
         // List of elements
-        std::list <Element> elementlist;
+        std::vector <Element> elementlist;
         
-        // Add element
-        void addelement(Element element);
-        
-        // Iterate over elements to update the TOPO matrix
-        void updateTOPO();
-
-        // Iterate over elements (who iterate over nodes)
-        // to update the COORD matrix
-        void updateCOORD();
         
     public:
 
@@ -193,6 +127,12 @@ class Mesh {
 
         // Find global stiffnes matrix (K) and load vector (f)
         void findKf();
+
+        // Display stiffness matrix K
+        void printK();
+
+        // Display load vector f
+        void printf();
 
         // Solve the system in the steady state
         void steadystate();
